@@ -1,17 +1,33 @@
-var log = require('./log')
-var createLocalStorageAdapter = require('./local-storage-adapter')
-var createGlobalVariableAdapter = require('./global-variable-adapter')
+import {createLocalStorageAdapter} from "./local-storage-adapter";
+import {createGlobalVariableAdapter} from "./global-variable-adapter.js";
+import consola from "consola";
 
-var DEFAULT_QUEUE_LABEL = 'Queue That'
-var BACKOFF_TIME = 1000
-var QUEUE_GROUP_TIME = 100
-var PROCESS_TIMEOUT = 2000
-var DEFAULT_BATCH_SIZE = 20
-var ACTIVE_QUEUE_TIMEOUT = 2500
+const DEFAULT_QUEUE_LABEL = 'Queue That'
+const BACKOFF_TIME = 1000
+const QUEUE_GROUP_TIME = 100
+const PROCESS_TIMEOUT = 2000
+const DEFAULT_BATCH_SIZE = 20
+const ACTIVE_QUEUE_TIMEOUT = 2500
 
-module.exports = createQueueThat
 
-function createQueueThat (options) {
+declare global {
+    interface Window {
+        __queueThat__: Record<string, string>
+    }
+}
+
+export interface QueueOptions {
+    process: (batch: string[], callback: (err: Error) => void) => void
+    batchSize?: number
+    label?: string
+    trim?: (queue: string[]) => string[]
+    queueGroupTime?: number
+    backoffTime?: number
+    processTimeout?: number
+    activeQueueTimeout?: number
+}
+
+export default function createQueueThat (options: QueueOptions) {
   if (!options.process) {
     throw new Error('a process function is required')
   }
@@ -27,14 +43,18 @@ function createQueueThat (options) {
     throw new Error('active queue timeout must be greater than process timeout')
   }
 
-  var checkTimer, processTimer, newQueueTimer, flushTimer
-  var processingTasks = false
-  var checkScheduled = false
-  var queueId = Math.random() + now()
-  var flushScheduled = false
-  var destroyed = false
+  // eslint-disable-next-line prefer-const -- we need to assign to this later
+  let checkTimer: number | null = null;
+  let newQueueTimer: number | null = null;
+  let processTimer: number | null = null;
+  let flushTimer: number | null = null;
+  let processingTasks = false
+  let checkScheduled = false
+  const queueId = Math.random() + now()
+  let flushScheduled = false
+  let destroyed = false
 
-  var storageAdapter = createLocalStorageAdapter(options.label)
+  let storageAdapter = createLocalStorageAdapter(options.label)
   if (!storageAdapter.works()) {
     storageAdapter = createGlobalVariableAdapter(options.label)
   }
@@ -44,15 +64,15 @@ function createQueueThat (options) {
   queueThat.flush = flush
   queueThat.destroy = function destroy () {
     destroyed = true
-    clearTimeout(checkTimer)
-    clearTimeout(processTimer)
-    clearTimeout(newQueueTimer)
-    clearTimeout(flushTimer)
+    if(checkTimer) clearTimeout(checkTimer)
+    if(processTimer) clearTimeout(processTimer)
+    if(newQueueTimer) clearTimeout(newQueueTimer)
+    if(flushTimer) clearTimeout(flushTimer)
   }
   queueThat.flushQueueCache = queueThat.storageAdapter.flush
   deactivateOnUnload(queueId)
 
-  log.info('Initialized with queue ID ' + queueId)
+  consola.info('Initialized with queue ID ' + queueId)
 
   checkQueueDebounce()
   /**
@@ -63,12 +83,12 @@ function createQueueThat (options) {
 
   return queueThat
 
-  function queueThat (item) {
-    var queue = storageAdapter.getQueue()
+  function queueThat (item: string) {
+    const queue = storageAdapter.getQueue()
     queue.push(item)
-    storageAdapter.setQueue(options.trim(queue))
+    storageAdapter.setQueue(options.trim!(queue))
 
-    log.info('Item queued')
+    consola.info('Item queued')
 
     checkQueueDebounce()
   }
@@ -78,7 +98,7 @@ function createQueueThat (options) {
 
     checkScheduled = true
     flushScheduled = true
-    clearTimeout(checkTimer)
+    if(checkTimer) clearTimeout(checkTimer)
 
     flushTimer = setTimeout(function checkQueueAndReset () {
       checkQueue()
@@ -93,42 +113,49 @@ function createQueueThat (options) {
     checkTimer = setTimeout(function checkQueueAndReset () {
       checkQueue()
       checkScheduled = false
-    }, options.queueGroupTime)
+    }, options.queueGroupTime!)
   }
 
   function checkQueue () {
-    log.info('Checking queue')
+    consola.info('Checking queue')
 
     if (processingTasks) return
 
-    var backoffTime = storageAdapter.getBackoffTime() - now()
+    const backoffTime = storageAdapter.getBackoffTime() - now()
     if (backoffTime > 0) {
       setTimeout(checkQueue, backoffTime)
       return
     }
 
-    var lastActiveQueue = getLastActiveQueueInfo()
+    const lastActiveQueue = getLastActiveQueueInfo()
     if (lastActiveQueue.active && lastActiveQueue.id !== queueId) return
-    if (lastActiveQueue.id !== queueId) log.info('Switching active queue to ' + queueId)
+    if (lastActiveQueue.id !== queueId) consola.info('Switching active queue to ' + queueId)
 
     // Need to always do this to keep active
     storageAdapter.setActiveQueue(queueId)
 
-    var batch = storageAdapter.getQueue().slice(0, options.batchSize)
+    const batch = storageAdapter.getQueue().slice(0, options.batchSize!)
     if (batch.length === 0) {
       return
     }
 
-    log.info('Processing queue batch of ' + batch.length + ' items')
-    batch.containsRepeatedItems = storageAdapter.getQueueProcessing()
-    if (batch.containsRepeatedItems) log.info('Batch contains repeated items')
-    else log.info('Batch does not contain repeated items')
+    const batchContainer: {
+        containsRepeatedItems: boolean,
+        batch: string[]
+    } = {
+        containsRepeatedItems: storageAdapter.getQueueProcessing(),
+        batch: batch
+    }
 
-    var itemsProcessing = batch.length
-    var timeout = false
-    var finished = false
+    consola.info('Processing queue batch of ' + batch.length + ' items')
+    if (batchContainer.containsRepeatedItems) consola.info('Batch contains repeated items')
+    else consola.info('Batch does not contain repeated items')
 
-    options.process(batch, function (err) {
+    const itemsProcessing = batch.length
+    let timeout = false
+    let finished = false
+
+    options.process(batch, function (err: Error) {
       if (timeout || destroyed) return
       processingTasks = false
       finished = true
@@ -139,13 +166,13 @@ function createQueueThat (options) {
       }
 
       storageAdapter.setErrorCount(0)
-      var queue = rest(storageAdapter.getQueue(), itemsProcessing)
+      const queue = rest(storageAdapter.getQueue(), itemsProcessing)
       storageAdapter.setQueue(queue)
 
       storageAdapter.setQueueProcessing(false)
       storageAdapter.flush()
 
-      log.info('Queue processed, ' + queue.length + ' remaining items')
+      consola.info('Queue processed, ' + queue.length + ' remaining items')
 
       checkQueueDebounce()
     })
@@ -155,30 +182,35 @@ function createQueueThat (options) {
       timeout = true
       processingTasks = false
       processError(new Error('Task timeout'))
-    }, options.processTimeout)
+    }, options.processTimeout!)
 
     processingTasks = true
     storageAdapter.setQueueProcessing(true)
     storageAdapter.flush()
   }
 
-  function processError (err) {
-    log.error('Process error, backing off (' + err.message + ')')
-    var errorCount = storageAdapter.getErrorCount() + 1
+  function processError (err: Error) {
+    consola.error('Process error, backing off (' + err.message + ')')
+    const errorCount = storageAdapter.getErrorCount() + 1
     storageAdapter.setErrorCount(errorCount)
-    storageAdapter.setBackoffTime(now() + options.backoffTime * Math.pow(2, errorCount - 1))
-    log.warn('backoff time ' + (storageAdapter.getBackoffTime() - now()) + 'ms')
+    storageAdapter.setBackoffTime(now() + options.backoffTime! * Math.pow(2, errorCount - 1))
+    consola.warn('backoff time ' + (storageAdapter.getBackoffTime() - now()) + 'ms')
   }
 
   function getLastActiveQueueInfo () {
-    var info = {}
-    var activeinstance = storageAdapter.getActiveQueue()
+    const info: {
+        id?: number
+        active: boolean
+    } = {
+        active: false
+    }
+    const activeinstance = storageAdapter.getActiveQueue()
     if (activeinstance === undefined) {
       info.active = false
       return info
     }
     info.id = activeinstance.id
-    var timeSinceActive = now() - activeinstance.ts
+    const timeSinceActive = now() - activeinstance.ts
     info.active = !(timeSinceActive >= ACTIVE_QUEUE_TIMEOUT)
     return info
   }
@@ -192,28 +224,26 @@ function createQueueThat (options) {
    * necessary but is better/quicker than waiting for a
    * few seconds for the queue to be unresponsive.
    */
-  function deactivateOnUnload (queueId) {
+  function deactivateOnUnload (queueId: number) {
     if (window.addEventListener) {
       window.addEventListener('beforeunload', deactivate)
-    } else if (window.attachEvent) {
-      window.attachEvent('onbeforeunload', deactivate)
     }
 
     function deactivate () {
-      var activeQueue = storageAdapter.getActiveQueue()
+      const activeQueue = storageAdapter.getActiveQueue()
       if (activeQueue && activeQueue.id === queueId) {
         queueThat.destroy()
         storageAdapter.clearActiveQueue()
-        log.info('deactivated on page unload')
+        consola.info('deactivated on page unload')
       }
     }
   }
 }
 
-function identity (input) {
+function identity (input: string[]) {
   return input
 }
 
-function rest (array, n) {
+function rest(array: string[], n: number) {
   return Array.prototype.slice.call(array, n)
 }

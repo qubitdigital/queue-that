@@ -1,11 +1,12 @@
-var createLocalStorageAdapter = require('./local-storage-adapter')
+import { createLocalStorageAdapter } from './local-storage-adapter'
 
-module.exports = createGlobalVariableAdapter
 
-function createGlobalVariableAdapter (queueName) {
+
+
+export function createGlobalVariableAdapter (queueName: string) {
   window.__queueThat__ = window.__queueThat__ || {}
 
-  var localStorageAdapter = createLocalStorageAdapter(queueName)
+  const localStorageAdapter = createLocalStorageAdapter(queueName)
   localStorageAdapter.save = save
   localStorageAdapter.load = load
   localStorageAdapter.remove = remove
@@ -13,15 +14,15 @@ function createGlobalVariableAdapter (queueName) {
 
   return localStorageAdapter
 
-  function save (key, data) {
+  function save (key: string, data: string|number|boolean|object) {
     window.__queueThat__[key] = String(data)
   }
 
-  function load (key) {
+  function load (key:string) {
     return window.__queueThat__[key]
   }
 
-  function remove (key) {
+  function remove (key:string) {
     delete window.__queueThat__[key]
   }
 }
