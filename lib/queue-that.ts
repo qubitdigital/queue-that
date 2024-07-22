@@ -11,23 +11,23 @@ const ACTIVE_QUEUE_TIMEOUT = 2500
 
 
 declare global {
-    interface Window {
-        __queueThat__: Record<string, string>
-    }
+  interface Window {
+    __queueThat__: Record<string, string>
+  }
 }
 
-export interface QueueOptions {
-    process: (batch: string[], callback: (err: Error) => void) => void
-    batchSize?: number
-    label?: string
-    trim?: (queue: string[]) => string[]
-    queueGroupTime?: number
-    backoffTime?: number
-    processTimeout?: number
-    activeQueueTimeout?: number
+export interface QueueOptions<T> {
+  process: (batch: T[], callback: (err?: Error) => void) => void
+  batchSize?: number
+  label?: string
+  trim?: (queue: T[]) => T[]
+  queueGroupTime?: number
+  backoffTime?: number
+  processTimeout?: number
+  activeQueueTimeout?: number
 }
 
-export default function createQueueThat (options: QueueOptions) {
+export default function createQueueThat<T> (options: QueueOptions<T>) {
   if (!options.process) {
     throw new Error('a process function is required')
   }
@@ -54,9 +54,9 @@ export default function createQueueThat (options: QueueOptions) {
   let flushScheduled = false
   let destroyed = false
 
-  let storageAdapter = createLocalStorageAdapter(options.label)
+  let storageAdapter = createLocalStorageAdapter<T>(options.label)
   if (!storageAdapter.works()) {
-    storageAdapter = createGlobalVariableAdapter(options.label)
+    storageAdapter = createGlobalVariableAdapter<T>(options.label)
   }
 
   queueThat.storageAdapter = storageAdapter
@@ -83,7 +83,7 @@ export default function createQueueThat (options: QueueOptions) {
 
   return queueThat
 
-  function queueThat (item: string) {
+  function queueThat (item: T) {
     const queue = storageAdapter.getQueue()
     queue.push(item)
     storageAdapter.setQueue(options.trim!(queue))
@@ -140,11 +140,11 @@ export default function createQueueThat (options: QueueOptions) {
     }
 
     const batchContainer: {
-        containsRepeatedItems: boolean,
-        batch: string[]
+      containsRepeatedItems: boolean,
+      batch: T[]
     } = {
-        containsRepeatedItems: storageAdapter.getQueueProcessing(),
-        batch: batch
+      containsRepeatedItems: storageAdapter.getQueueProcessing(),
+      batch: batch
     }
 
     consola.info('Processing queue batch of ' + batch.length + ' items')
@@ -155,7 +155,7 @@ export default function createQueueThat (options: QueueOptions) {
     let timeout = false
     let finished = false
 
-    options.process(batch, function (err: Error) {
+    options.process(batch, function (err?: Error) {
       if (timeout || destroyed) return
       processingTasks = false
       finished = true
@@ -199,10 +199,10 @@ export default function createQueueThat (options: QueueOptions) {
 
   function getLastActiveQueueInfo () {
     const info: {
-        id?: number
-        active: boolean
+      id?: number
+      active: boolean
     } = {
-        active: false
+      active: false
     }
     const activeinstance = storageAdapter.getActiveQueue()
     if (activeinstance === undefined) {
@@ -238,12 +238,14 @@ export default function createQueueThat (options: QueueOptions) {
       }
     }
   }
+
+  function identity (input: T[]) {
+    return input
+  }
+
+  function rest(array: T[], n: number) {
+    return Array.prototype.slice.call(array, n)
+  }
+
 }
 
-function identity (input: string[]) {
-  return input
-}
-
-function rest(array: string[], n: number) {
-  return Array.prototype.slice.call(array, n)
-}

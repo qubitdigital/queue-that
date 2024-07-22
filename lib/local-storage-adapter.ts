@@ -4,7 +4,7 @@ const BACKOFF_TIME_KEY = '* - Backoff Time'
 const ERROR_COUNT_KEY = '* - Error Count'
 const QUEUE_PROCESSING_KEY = '* - Queue Processing'
 
-export function createLocalStorageAdapter (queueName: string) {
+export function createLocalStorageAdapter<T>(queueName: string) {
   const queueKey = QUEUE_KEY.replace('*', queueName)
   const activeQueueKey = ACTIVE_QUEUE_KEY.replace('*', queueName)
   const backoffTimeKey = BACKOFF_TIME_KEY.replace('*', queueName)
@@ -13,7 +13,7 @@ export function createLocalStorageAdapter (queueName: string) {
 
   let dirtyCache = true
   let setPending = false
-  let queueCache: string[] = []
+  let queueCache: T[] = []
 
   const adapter = {
     getQueue: getQueue,
@@ -46,7 +46,7 @@ export function createLocalStorageAdapter (queueName: string) {
     }
   }
 
-  function getQueue () : string[]{
+  function getQueue () : T[]{
     if (dirtyCache) {
       queueCache = JSON.parse(adapter.load(queueKey) || '[]')
       dirtyCache = false
@@ -55,7 +55,7 @@ export function createLocalStorageAdapter (queueName: string) {
     return queueCache
   }
 
-  function setQueue (queue: string[]) {
+  function setQueue (queue: T[]) {
     queueCache = queue
     dirtyCache = false
     setPending = true

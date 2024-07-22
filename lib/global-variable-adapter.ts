@@ -3,10 +3,10 @@ import { createLocalStorageAdapter } from './local-storage-adapter'
 
 
 
-export function createGlobalVariableAdapter (queueName: string) {
+export function createGlobalVariableAdapter<T>(queueName: string) {
   window.__queueThat__ = window.__queueThat__ || {}
 
-  const localStorageAdapter = createLocalStorageAdapter(queueName)
+  const localStorageAdapter = createLocalStorageAdapter<T>(queueName)
   localStorageAdapter.save = save
   localStorageAdapter.load = load
   localStorageAdapter.remove = remove
