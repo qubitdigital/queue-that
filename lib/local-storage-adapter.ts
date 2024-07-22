@@ -1,25 +1,21 @@
-var json = require('json-bourne')
+const QUEUE_KEY = '* - Queue';
+const ACTIVE_QUEUE_KEY = '* - Active Queue'
+const BACKOFF_TIME_KEY = '* - Backoff Time'
+const ERROR_COUNT_KEY = '* - Error Count'
+const QUEUE_PROCESSING_KEY = '* - Queue Processing'
 
-var QUEUE_KEY = '* - Queue'
-var ACTIVE_QUEUE_KEY = '* - Active Queue'
-var BACKOFF_TIME_KEY = '* - Backoff Time'
-var ERROR_COUNT_KEY = '* - Error Count'
-var QUEUE_PROCESSING_KEY = '* - Queue Processing'
+export function createLocalStorageAdapter<T>(queueName: string) {
+  const queueKey = QUEUE_KEY.replace('*', queueName)
+  const activeQueueKey = ACTIVE_QUEUE_KEY.replace('*', queueName)
+  const backoffTimeKey = BACKOFF_TIME_KEY.replace('*', queueName)
+  const errorCountKey = ERROR_COUNT_KEY.replace('*', queueName)
+  const queueProcessingKey = QUEUE_PROCESSING_KEY.replace('*', queueName)
 
-module.exports = createLocalStorageAdapter
+  let dirtyCache = true
+  let setPending = false
+  let queueCache: T[] = []
 
-function createLocalStorageAdapter (queueName) {
-  var queueKey = QUEUE_KEY.replace('*', queueName)
-  var activeQueueKey = ACTIVE_QUEUE_KEY.replace('*', queueName)
-  var backoffTimeKey = BACKOFF_TIME_KEY.replace('*', queueName)
-  var errorCountKey = ERROR_COUNT_KEY.replace('*', queueName)
-  var queueProcessingKey = QUEUE_PROCESSING_KEY.replace('*', queueName)
-
-  var dirtyCache = true
-  var setPending = false
-  var queueCache = []
-
-  var adapter = {
+  const adapter = {
     getQueue: getQueue,
     setQueue: setQueue,
     getErrorCount: getErrorCount,
@@ -45,21 +41,21 @@ function createLocalStorageAdapter (queueName) {
   function flush () {
     dirtyCache = true
     if (setPending) {
-      adapter.save(queueKey, json.stringify(queueCache))
+      adapter.save(queueKey, JSON.stringify(queueCache))
       setPending = false
     }
   }
 
-  function getQueue () {
+  function getQueue () : T[]{
     if (dirtyCache) {
-      queueCache = json.parse(adapter.load(queueKey) || '[]')
+      queueCache = JSON.parse(adapter.load(queueKey) || '[]')
       dirtyCache = false
       setTimeout(flush, 0)
     }
     return queueCache
   }
 
-  function setQueue (queue) {
+  function setQueue (queue: T[]) {
     queueCache = queue
     dirtyCache = false
     setPending = true
@@ -67,20 +63,20 @@ function createLocalStorageAdapter (queueName) {
   }
 
   function getErrorCount () {
-    var count = adapter.load(errorCountKey)
+    const count = adapter.load(errorCountKey)
     return count === undefined ? 0 : Number(count)
   }
 
   function getBackoffTime () {
-    var time = adapter.load(backoffTimeKey)
+    const time = adapter.load(backoffTimeKey)
     return time === undefined ? 0 : Number(time)
   }
 
-  function setErrorCount (n) {
+  function setErrorCount (n: number) {
     adapter.save(errorCountKey, n)
   }
 
-  function setBackoffTime (n) {
+  function setBackoffTime (n: number) {
     adapter.save(backoffTimeKey, n)
   }
 
@@ -88,11 +84,11 @@ function createLocalStorageAdapter (queueName) {
     if (adapter.load(activeQueueKey) === undefined) {
       return
     }
-    return json.parse(adapter.load(activeQueueKey))
+    return JSON.parse(adapter.load(activeQueueKey))
   }
 
-  function setActiveQueue (id) {
-    adapter.save(activeQueueKey, json.stringify({
+  function setActiveQueue (id: number) {
+    adapter.save(activeQueueKey, JSON.stringify({
       id: id,
       ts: now()
     }))
@@ -106,17 +102,17 @@ function createLocalStorageAdapter (queueName) {
     return Boolean(Number(adapter.load(queueProcessingKey)))
   }
 
-  function setQueueProcessing (isProcessing) {
+  function setQueueProcessing (isProcessing:boolean) {
     adapter.save(queueProcessingKey, Number(isProcessing))
   }
 
   function works () {
-    var works = false
+    let works = false
     try {
       adapter.save('queue-that-works', 'anything')
       works = adapter.load('queue-that-works') === 'anything'
       adapter.remove('queue-that-works')
-    } catch (e) {}
+    } catch (e) { /* empty */ }
     return works
   }
 
@@ -129,18 +125,25 @@ function createLocalStorageAdapter (queueName) {
   }
 }
 
-function save (key, data) {
-  window.localStorage[key] = data
+
+
+
+
+
+
+function save (key: string, data: string|number|boolean|object) {
+  window.localStorage[key] = String(data)
 }
 
-function load (key) {
+function load (key: string) {
   return window.localStorage[key]
 }
 
-function remove (key) {
+function remove (key: string) {
   window.localStorage.removeItem(key)
 }
 
-function now () {
+function now () : number{
   return (new Date()).getTime()
 }
+
